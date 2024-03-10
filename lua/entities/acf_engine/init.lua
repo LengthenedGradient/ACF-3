@@ -377,6 +377,9 @@ do -- Spawn and Update functions
 		Entity.DataStore = Entities.GetArguments("acf_engine")
 		Entity.revLimiterEnabled = true
 
+		Entity.DriverCheckDelay = 0 -- For checking presence of driver
+		Entity.HasDriver = false -- Presence of a driver
+
 		UpdateEngine(Entity, Data, Class, Engine, Type)
 
 		WireLib.TriggerOutput(Entity, "Entity", Entity)
@@ -662,11 +665,22 @@ end
 function ENT:GetConsumption(Throttle, RPM)
 	if not IsValid(self.FuelTank) then return 0 end
 
+	if Clock.CurTime >= self.DriverCheckDelay then
+		self.DriverCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
+
+		local count = 0
+		for _ in pairs(self.Crew or {}) do
+			count = count + 1
+		end
+		self.HasDriver = (count > 0)
+	end
+	local DriverMult = self.HasDriver and 1 or 1.75
+
 	if self.FuelType == "Electric" then
-		return Throttle * self.FuelUse * self.Torque * RPM * 1.05e-4
+		return Throttle * self.FuelUse * self.Torque * RPM * 1.05e-4 * DriverMult
 	else
 		local IdleConsumption = self.PeakPower * 5e2
-		return self.FuelUse * (IdleConsumption + Throttle * self.Torque * RPM) / self.FuelTank.FuelDensity
+		return self.FuelUse * (IdleConsumption + Throttle * self.Torque * RPM) / self.FuelTank.FuelDensity * DriverMult
 	end
 end
 

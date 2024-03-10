@@ -3,6 +3,12 @@ AddCSLuaFile("shared.lua")
 
 include("shared.lua")
 
+--===============================================================================================--
+-- Local Funcs and Vars
+--===============================================================================================--
+local HookRun     = hook.Run
+
+--===============================================================================================--
 do
 	local hook	   = hook
 	local Classes	= ACF.Classes
@@ -148,57 +154,87 @@ do
 		return false, "This weapon is not linked to this crewmate."
 	end)
 
-	ACF.RegisterClassLink("acf_gearbox", "acf_crew", function(Gearbox, Target)
-		if not Gearbox.Crew then Gearbox.Crew = {} end
-		if Gearbox.Crew[Target] then return false, "This gearbox is already linked to this crewmate!" end
-		if Target.Links[Crew] then return false, "This gearbox is already linked to this crewmate!" end
-		if not Target.CrewData.LinkableEnts["acf_gearbox"] then return false, Target.CrewData.CrewType .. " cannot be linked to a gearbox" end
+	ACF.RegisterClassLink("acf_engine", "acf_crew", function(Engine, Target)
+		if not Engine.Crew then Engine.Crew = {} end
+		if Engine.Crew[Target] then return false, "This engine is already linked to this crewmate!" end
+		if Target.Links[Crew] then return false, "This engine is already linked to this crewmate!" end
+		if not Target.CrewData.LinkableEnts["acf_engine"] then return false, Target.CrewData.CrewType .. " cannot be linked to a engine" end
 
-		Gearbox.Crew[Target] = true -- Make the crew linked to the gun
-		Target.Links[Gearbox] = true
+		Engine.Crew[Target] = true -- Make the crew linked to the gun
+		Target.Links[Engine] = true
 
-		Gearbox:UpdateOverlay()
+		Engine:UpdateOverlay()
 		Target:UpdateOverlay()
 
 		return true, "Crewmate linked successfully!"
 	end)
 
-	ACF.RegisterClassUnlink("acf_gearbox", "acf_crew", function(Gearbox, Target)
-		if Gearbox.Crew[Target] or Target.Links[Gearbox] then
-			Gearbox.Crew[Target] = nil
-			Target.Links[Gearbox] = nil -- Make the crew unlinked to the gun
+	ACF.RegisterClassUnlink("acf_engine", "acf_crew", function(Engine, Target)
+		if Engine.Crew[Target] or Target.Links[Engine] then
+			Engine.Crew[Target] = nil
+			Target.Links[Engine] = nil -- Make the crew unlinked to the gun
 
-			Gearbox:UpdateOverlay()
+			Engine:UpdateOverlay()
 			Target:UpdateOverlay()
 
 			return true, "Crewmate unlinked successfully!"
 		end
 
-		return false, "This gearbox is not linked to this crewmate."
+		return false, "This Engine is not linked to this crewmate."
 	end)
 end
 
 do -- Overlay Update
 	function ENT:UpdateOverlayText()
-		return "Linked: " .. #table.GetKeys(self.Links)
+		local Str = "Linked to: \n"
+		for ent,_ in pairs(self.Links) do
+			Str = Str .. "" .. tostring(ent) .. "\n"
+		end
+		return Str
 		-- return "CREW_OVERLAY"--Text:format(Status, Size, self.FuelType, Content)
 	end
 end
 
---[[
-function ENT:Initialize()
-	if self:GetModel() == "models/vehicles/pilot_seat.mdl" then
-		self:SetPos(self:LocalToWorld(Vector(0, 15.3, -14)))
-	end
-	self:SetModel( "models/chairs_playerstart/sitpose.mdl" )
-	self:SetMoveType(MOVETYPE_VPHYSICS);
-	self:PhysicsInit(SOLID_VPHYSICS);
-	self:SetUseType(SIMPLE_USE);
-	self:SetSolid(SOLID_VPHYSICS);
+function ENT:PreEntityCopy()
+	if next(self.Links) then
+		local Entities = {}
 
-	self.Master = {}
-	self.ACF = {}
-	self.ACF.Health = 1
-	self.ACF.MaxHealth = 1
+		for LinkTarget in pairs(self.Links) do
+			Entities[#Entities + 1] = LinkTarget:EntIndex()
+		end
+
+		duplicator.StoreEntityModifier(self, "ACFCrews", Entities)
+	end
+
+	-- Wire dupe info
+	self.BaseClass.PreEntityCopy(self)
 end
-]]
+
+function ENT:PostEntityPaste(Player, Ent, CreatedEntities)
+	local EntMods = Ent.EntityMods
+
+	if EntMods.ACFCrews then
+		for _, EntID in pairs(EntMods.ACFCrews) do
+			self:Link(CreatedEntities[EntID])
+		end
+
+		EntMods.ACFCrews = nil
+	end
+
+	--Wire dupe info
+	self.BaseClass.PostEntityPaste(self, Player, Ent, CreatedEntities)
+end
+
+function ENT:OnRemove()
+	local Class = self.ClassData
+
+	if Class.OnLast then
+		Class.OnLast(self, Class)
+	end
+
+	HookRun("ACF_OnEntityLast", "acf_crew", self, Class)
+
+	for ent in pairs(self.Links) do
+		self:Unlink(ent)
+	end
+end

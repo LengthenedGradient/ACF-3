@@ -14,18 +14,18 @@ Components.Register("CRW", {
 do
 	Components.RegisterItem("CRW-Driver", "CRW", {
 		Name = "Driver Crewseat",
-		Description = "temp desc",
+		Description = "Driver crew member",
 		Model = "models/chairs_playerstart/sitpose.mdl",
 		Mass = 65,
 		CrewType = "Driver",
 		LinkableEnts = {
-			["acf_gearbox"] = true,
+			["acf_engine"] = true,
 		},
 		Preview = {
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("hi " .. Data.Mass)
+			Menu:AddLabel("Driver crew member " .. Data.Mass)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
@@ -35,7 +35,7 @@ end
 do
 	Components.RegisterItem("CRW-Gunner", "CRW", {
 		Name = "Gunner Crewseat",
-		Description = "temp desc",
+		Description = "Gunner crew member",
 		Model = "models/chairs_playerstart/sitpose.mdl",
 		Mass = 65,
 		CrewType = "Gunner",
@@ -46,7 +46,7 @@ do
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("hi " .. Data.Mass)
+			Menu:AddLabel("Gunner crew member " .. Data.Mass)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
@@ -56,7 +56,7 @@ end
 do
 	Components.RegisterItem("CRW-Loader", "CRW", {
 		Name = "Loader Crewseat",
-		Description = "temp desc",
+		Description = "Loader crew member",
 		Model = "models/chairs_playerstart/sitpose.mdl",
 		Mass = 65,
 		CrewType = "Loader",
@@ -67,7 +67,7 @@ do
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("hi " .. Data.Mass)
+			Menu:AddLabel("Loader crew member " .. Data.Mass)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
