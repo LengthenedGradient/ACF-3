@@ -377,7 +377,7 @@ do -- Spawn and Update functions
 		Entity.DataStore = Entities.GetArguments("acf_engine")
 		Entity.revLimiterEnabled = true
 
-		Entity.DriverCheckDelay = 0 -- For checking presence of driver
+		Entity.CrewCheckDelay = 0 -- For checking presence of driver
 		Entity.HasDriver = false -- Presence of a driver
 
 		UpdateEngine(Entity, Data, Class, Engine, Type)
@@ -496,6 +496,27 @@ do -- Spawn and Update functions
 		net.Broadcast()
 
 		return true, "Engine updated successfully!" .. Feedback
+	end
+
+	-- Updates variables of the entity based on the crew linked (can be forced)
+	-- Called when spread is calculated and/or a round is chambered
+	-- Force called by crews when they're created/removed
+	-- HasGunner and LoaderCount are updated when this is called
+	function ENT:CheckCrew(Force)
+		if (Force == true) or (Clock.CurTime >= self.CrewCheckDelay) then
+			self.CrewCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
+
+			local DriverCount = 0
+			for ent in pairs(self.Crew or {}) do
+				if ent.CrewData.CrewType == "Driver" then DriverCount = DriverCount + 1 end
+			end
+
+			self.HasDriver = (DriverCount > 0)
+
+			for _, ply in ipairs( player.GetAll() ) do
+				ply:ChatPrint( "Drivers: " .. tostring(self.HasDriver ))
+			end
+		end
 	end
 end
 
@@ -665,15 +686,7 @@ end
 function ENT:GetConsumption(Throttle, RPM)
 	if not IsValid(self.FuelTank) then return 0 end
 
-	if Clock.CurTime >= self.DriverCheckDelay then
-		self.DriverCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
-
-		local count = 0
-		for _ in pairs(self.Crew or {}) do
-			count = count + 1
-		end
-		self.HasDriver = (count > 0)
-	end
+	self:CheckCrew()
 	local DriverMult = self.HasDriver and 1 or 1.75
 
 	if self.FuelType == "Electric" then

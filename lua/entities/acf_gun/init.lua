@@ -244,9 +244,7 @@ do -- Spawn and Update functions --------------------------------
 		Entity.BulletData   = EMPTY
 		Entity.DataStore    = Entities.GetArguments("acf_gun")
 
-		Entity.LoaderCheckDelay = 0 -- For updating load times based on presence of loader(s)/AL(s)
-		Entity.GunnerCheckDelay = 0 -- For updating accuracy based on presence of gunner(s)
-
+		Entity.CrewCheckDelay = 0
 		Entity.LoaderCount = 0 -- Number of loaders
 		Entity.HasGunner = false -- Presence of gunner
 
@@ -339,6 +337,31 @@ do -- Spawn and Update functions --------------------------------
 		net.Broadcast()
 
 		return true, "Weapon updated successfully!"
+	end
+
+	-- Updates variables of the entity based on the crew linked (can be forced)
+	-- Called when spread is calculated and/or a round is chambered
+	-- Force called by crews when they're created/removed
+	-- HasGunner and LoaderCount are updated when this is called
+	function ENT:CheckCrew(Force)
+		if (Force == true) or (Clock.CurTime >= self.CrewCheckDelay) then
+			self.CrewCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
+
+			local GunnerCount = 0
+			local LoaderCount = 0
+			for ent in pairs(self.Crew or {}) do
+				if ent.CrewType == "Gunner" then GunnerCount = GunnerCount + 1 end
+				if ent.CrewType == "Loader" then LoaderCount = LoaderCount + 1 end
+			end
+
+			self.HasGunner = (GunnerCount > 0)
+			self.LoaderCount = LoaderCount
+
+			for _, ply in ipairs( player.GetAll() ) do
+				ply:ChatPrint( "Gunner: " .. tostring(self.HasGunner ))
+				ply:ChatPrint( "Loaders: " .. tostring(self.LoaderCount ))
+			end
+		end
 	end
 end ---------------------------------------------
 
@@ -517,21 +540,7 @@ do -- Metamethods --------------------------------
 			local SpreadScale = ACF.SpreadScale
 			local IaccMult    = math.Clamp(((1 - SpreadScale) / 0.5) * ((self.ACF.Health / self.ACF.MaxHealth) - 1) + 1, 1, SpreadScale)
 
-			if Clock.CurTime >= self.GunnerCheckDelay then
-				self.GunnerCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
-
-				local count = 0
-				for ent in pairs(self.Crew or {}) do
-					if ent.CrewData.CrewType ~= "Gunner" then continue end
-					count = count + 1
-				end
-
-				self.HasGunner = (count > 0)
-
-				for _, ply in ipairs( player.GetAll() ) do
-					ply:ChatPrint( "Gunner: " .. tostring(self.HasGunner ))
-				end
-			end
+			self:CheckCrew()
 			local GunnerMult = self.HasGunner and 1 or 1.75
 
 			return self.Spread * ACF.GunInaccuracyScale * IaccMult * GunnerMult
@@ -673,21 +682,8 @@ do -- Metamethods --------------------------------
 				local BulletData = Crate.BulletData
 				local Time		 = TimeOverride or (ACF.BaseReload + (BulletData.CartMass * ACF.MassToTime * 0.666) + (BulletData.ProjLength * ACF.LengthToTime * 0.333)) -- Mass contributes 2/3 of the reload time with length contributing 1/3
 
-				if Clock.CurTime >= self.LoaderCheckDelay then
-					self.LoaderCheckDelay = Clock.CurTime + 2 + math.Rand(1,2)
-
-					local count = 0
-					for ent in pairs(self.Crew or {}) do
-						if ent.CrewType ~= "Loader" then continue end
-						count = count + 1
-					end
-					self.LoaderCount = count
-
-					for _, ply in ipairs( player.GetAll() ) do
-						ply:ChatPrint( "Loaders: " .. self.LoaderCount )
-					end
-				end
-				local LoaderMult = 1 / (1 + self.LoaderCount) -- Multiplier to apply based on loader count
+				self:CheckCrew()
+				local LoaderMult = 1 / (1 + (self.LoaderCount or 0)) -- Multiplier to apply based on loader count
 
 				Time = Time * LoaderMult
 

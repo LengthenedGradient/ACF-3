@@ -76,6 +76,10 @@ if SERVER then
 				local Supply = math.ceil(ACF.RefillSpeed / Crate.BulletData.CartMass / Distance ^ 0.5)
 				local Transfer = math.min(Supply, Refill.Ammo, Crate.Capacity - Crate.Ammo)
 
+				for _, ply in ipairs( player.GetAll() ) do
+					ply:ChatPrint( "Refilling: " .. Supply )
+				end
+
 				if hook.Run("ACF_CanRefill", Refill, Crate, Transfer) == false then continue end
 
 				if not next(Refill.SupplyingTo) then

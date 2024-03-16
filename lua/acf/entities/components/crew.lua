@@ -4,28 +4,36 @@ local Components = ACF.Classes.Components
 Components.Register("CRW", {
 	Name   = "Crew Member",
 	Entity = "acf_crew",
+	Mass = 65,
 	LimitConVar = {
 		Name   = "_acf_crew",
-		Amount = 20,
+		Amount = 10,
 		Text   = "Maximum amount of acf crewmates a player can create."
 	}
 })
 
 do
-	Components.RegisterItem("CRW-Driver", "CRW", {
-		Name = "Driver Crewseat",
-		Description = "Driver crew member",
-		Model = "models/chairs_playerstart/sitpose.mdl",
-		Mass = 65,
-		CrewType = "Driver",
-		LinkableEnts = {
-			["acf_engine"] = true,
+	Components.RegisterItem("CRW-STAND", "CRW", {
+		Name = "Standing Crew Member",
+		Description = "Represents a tank's crew member. \nThis posture best suits a loader.",
+		Model = "models/chairs_playerstart/standingpose.mdl",
+		BaseErgoScores = {
+			["Gunner"] = 1,
+			["Loader"] = 1,
+			["Driver"] = 1,
+			["Commander"] = 1,
 		},
 		Preview = {
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("Driver crew member " .. Data.Mass)
+			Menu:AddLabel("Mass: " .. Data.Class.Mass)
+
+			local str = "Base Ergonomics Scores: \n"
+			for k,v in pairs(Data.BaseErgoScores) do
+				str = str .. k .. ": " .. v .. "\n"
+			end
+			Menu:AddLabel(str)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
@@ -33,20 +41,27 @@ do
 end
 
 do
-	Components.RegisterItem("CRW-Gunner", "CRW", {
-		Name = "Gunner Crewseat",
-		Description = "Gunner crew member",
+	Components.RegisterItem("CRW-SIT", "CRW", {
+		Name = "Sitting Crew Member",
+		Description = "Represents a tank's crew member. \nThis posture best suits a driver/gunner.",
 		Model = "models/chairs_playerstart/sitpose.mdl",
-		Mass = 65,
-		CrewType = "Gunner",
-		LinkableEnts = {
-			["acf_gun"] = true,
+		BaseErgoScores = {
+			["Gunner"] = 1,
+			["Loader"] = 1,
+			["Driver"] = 1,
+			["Commander"] = 1,
 		},
 		Preview = {
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("Gunner crew member " .. Data.Mass)
+			Menu:AddLabel("Mass: " .. Data.Class.Mass)
+
+			local str = "Base Ergonomics Scores: \n"
+			for k,v in pairs(Data.BaseErgoScores) do
+				str = str .. k .. ": " .. v .. "\n"
+			end
+			Menu:AddLabel(str)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
@@ -54,20 +69,27 @@ do
 end
 
 do
-	Components.RegisterItem("CRW-Loader", "CRW", {
-		Name = "Loader Crewseat",
-		Description = "Loader crew member",
-		Model = "models/chairs_playerstart/sitpose.mdl",
-		Mass = 65,
-		CrewType = "Loader",
-		LinkableEnts = {
-			["acf_gun"] = true,
+	Components.RegisterItem("CRW-PRONE", "CRW", {
+		Name = "Prone Crew Member",
+		Description = "Represents a tank's crew member. \nThis posture has horrible ergonomics, but can fit in very short spaces.",
+		Model = "models/chairs_playerstart/pronepose.mdl",
+		BaseErgoScores = {
+			["Gunner"] = 0.1,
+			["Loader"] = 0.1,
+			["Driver"] = 0.1,
+			["Commander"] = 0.1,
 		},
 		Preview = {
 			FOV = 100,
 		},
 		CreateMenu = function(Data, Menu)
-			Menu:AddLabel("Loader crew member " .. Data.Mass)
+			Menu:AddLabel("Mass: " .. Data.Class.Mass)
+
+			local str = "Base Ergonomics Scores: \n"
+			for k,v in pairs(Data.BaseErgoScores) do
+				str = str .. k .. ": " .. v .. "\n"
+			end
+			Menu:AddLabel(str)
 
 			ACF.SetClientData("PrimaryClass", "acf_crew")
 		end,
