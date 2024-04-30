@@ -412,6 +412,31 @@ function ACF.CreateAmmoMenu(Menu, Settings)
 		return Z
 	end)
 
+	local CrateGroupList = Menu:AddComboBox()
+	local CrateItemList = Menu:AddComboBox()
+	local CrateDoubling = Menu:AddCheckBox("Two piece/Double stacking")
+	CrateDoubling:SetClientData("CrateDoubling", "OnChange")
+
+	function CrateGroupList:OnSelect(Index, _, Data)
+		if self.Selected == Data then return end
+
+		self.ListData.Index = Index
+		self.Selected = Data
+
+		ACF.SetClientData("CrateType", Data.ID)
+
+		ACF.LoadSortedList(CrateItemList, Data.Items, "Order")
+	end
+
+	function CrateItemList:OnSelect(Index, _, Data)
+		if self.Selected == Data then return end
+
+		self.ListData.Index = Index
+		self.Selected = Data
+
+		ACF.SetClientData("CrateSubType", Data.ID)
+	end
+
 	local Base = Menu:AddCollapsible("Ammo Information")
 	local Desc = Base:AddLabel()
 
@@ -436,5 +461,6 @@ function ACF.CreateAmmoMenu(Menu, Settings)
 
 	Menu.AmmoBase = Base
 
+	ACF.LoadSortedList(CrateGroupList, ACF.Classes.CrateTypes.GetEntries(), "Order")
 	return List
 end

@@ -396,4 +396,9 @@ do -- Ammo crate capacity calculation
 
 		return Rounds, ExtraData
 	end
+
+	-- By Lengthened Gradient
+	function ACF.GetAmmoCrateCylinderCapacity(Size, WeaponClass, ToolData, BulletData)
+		
+	end
 end

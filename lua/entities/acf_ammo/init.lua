@@ -33,6 +33,7 @@ do -- Spawning and Updating --------------------
 	local Classes   = ACF.Classes
 	local WireIO    = Utilities.WireIO
 	local Crates    = Classes.Crates
+	local CrateTypes = Classes.CrateTypes
 	local Entities  = Classes.Entities
 	local AmmoTypes = Classes.AmmoTypes
 	local Weapons   = Classes.Weapons
@@ -72,7 +73,11 @@ do -- Spawning and Updating --------------------
 			Data.Size = Vector(X, Y, Z)
 		end
 
-		do -- The rest under applies to all ammo data formats
+		do -- The rest under applies to all ammo data formats			
+			-- Acts as a default (legacy crates dont have a cratetype so they will use these.)
+			if not isstring(Data.CrateType) then Data.CrateType = "AMMO_CRATE_CONTAINER" end
+			if not isstring(Data.CrateSubType) then Data.CrateSubType = "DEFAULT" end
+
 			-- Clamping size
 			local Min  = ACF.AmmoMinSize
 			local Max  = ACF.AmmoMaxSize
@@ -188,6 +193,7 @@ do -- Spawning and Updating --------------------
 		Entity.EntType    = "Ammo Crate"
 		Entity.ClassData  = Class
 		Entity.Class      = Class.ID -- Needed for custom killicons
+		Entity.WeaponData = Weapon -- For ACF Missiles lmao
 		Entity.Caliber    = Caliber
 
 		WireIO.SetupInputs(Entity, Inputs, Data, Class, Weapon, Ammo)
@@ -293,7 +299,13 @@ do -- Spawning and Updating --------------------
 		local Class  = Classes.GetGroup(Source, Data.Weapon) -- The class representing a weapon type (example IDs: "AC", "HW", etc.)
 		local Weapon = Source.GetItem(Class.ID, Data.Weapon) -- This is (unintentionally?) always nil due to Class.ID == Data.Weapon after verification
 		local Ammo   = AmmoTypes.Get(Data.AmmoType) -- The class representing this ammo type
-		local Model  = "models/holograms/rcube_thin.mdl"
+
+		-- Retrieve information about this crate
+		local CrateGroup = CrateTypes.Get(Data.CrateType)
+		local CrateItem = CrateTypes.GetItem(Data.CrateType, Data.CrateSubType)
+
+		local Model  = CrateItem.Model
+		local Material = CrateItem.Material
 
 		local CanSpawn = HookRun("ACF_PreEntitySpawn", "acf_ammo", Player, Data, Class, Weapon, Ammo)
 
@@ -310,7 +322,7 @@ do -- Spawning and Updating --------------------
 		Crate.ACF       = Crate.ACF or {}
 		Crate.ACF.Model = Model
 
-		Crate:SetMaterial("phoenix_storms/Future_vents")
+		Crate:SetMaterial(Material)
 		Crate:SetPlayer(Player)
 		Crate:SetScaledModel(Model)
 		Crate:SetAngles(Ang)
@@ -360,7 +372,7 @@ do -- Spawning and Updating --------------------
 		return Crate
 	end
 
-	Entities.Register("acf_ammo", MakeACF_Ammo, "Weapon", "Caliber", "AmmoType", "Size")
+	Entities.Register("acf_ammo", MakeACF_Ammo, "Weapon", "Caliber", "AmmoType", "Size", "CrateType", "CrateSubType")
 
 	ACF.RegisterLinkSource("acf_ammo", "Weapons")
 
