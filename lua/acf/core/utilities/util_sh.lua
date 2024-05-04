@@ -739,3 +739,9 @@ do -- File creation
 		return util.JSONToTable(file.Read(FullPath, "DATA"))
 	end
 end
+
+do -- Physical Hitbox Creation
+	function ACF.PhysicsInitCylinder() 
+	
+	end
+end

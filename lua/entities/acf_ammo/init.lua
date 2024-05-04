@@ -262,7 +262,6 @@ do -- Spawning and Updating --------------------
 		Entity:UpdateMass(true)
 	end
 
-	util.PrecacheModel("models/holograms/hq_cylinder.mdl")
 	util.AddNetworkString("ACF_RequestAmmoData")
 
 	-- Whenever a player requests ammo data, we'll send it to them
@@ -324,7 +323,8 @@ do -- Spawning and Updating --------------------
 
 		Crate:SetMaterial(Material)
 		Crate:SetPlayer(Player)
-		Crate:SetScaledModel(Model)
+		-- Crate:SetScaledModel(Model)
+		Crate:SetScaledParametric("Cylinder")
 		Crate:SetAngles(Ang)
 		Crate:SetPos(Pos)
 		Crate:Spawn()

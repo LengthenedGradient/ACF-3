@@ -11,7 +11,6 @@ local Network = ACF.Networking
 
 function ENT:GetOriginalSize()
 	local Data = self.ScaleData
-
 	return Data:GetSize()
 end
 
@@ -109,6 +108,15 @@ function ENT:SetScaledModel( Model )
 		self:SetScaleData("Model", Model )
 		self:Restore()
 	end
+end
+
+-- This is for parametric objects instead.
+function ENT:SetScaledParametric( Type )
+	if not self.ACF then self.ACF = {} end
+
+	local Data = self.ScaleData
+	self:SetScaleData(Type, "")
+	self:Restore()
 end
 
 do -- AdvDupe2 duped parented ammo workaround

@@ -1,3 +1,7 @@
+--[[
+	This file is the client side counterpart to model_data_sv.lua
+]]
+
 local ACF       = ACF
 local ModelData = ACF.ModelData
 local Models    = ModelData.Models
@@ -6,8 +10,8 @@ local Standby   = {}
 local Callbacks = {}
 
 --- Returns the current state of the requested model information
--- @param Model The model to check.
--- @return True if the model has been requested and the client is waiting for it.
+--- @param Model The model to check.
+--- @return True if the model has been requested and the client is waiting for it.
 function ModelData.IsOnStandby(Model)
 	local Path = ModelData.GetModelPath(Model)
 
@@ -17,11 +21,11 @@ function ModelData.IsOnStandby(Model)
 end
 
 --- Queues a function to be called for an object when the model data is received.
--- If the object is valid, the callback will be called with it as the first argument.
--- Otherwise, the callback won't be called at all.
--- @param Model The model to queue the callback for.
--- @param Object Anything that won't fail the IsValid check, usually panels or entities.
--- @param Callback The function to call when the model data is received.
+--- If the object is valid, the callback will be called with it as the first argument.
+--- Otherwise, the callback won't be called at all.
+--- @param Model The model to queue the callback for.
+--- @param Object Anything that won't fail the IsValid check, usually panels or entities.
+--- @param Callback The function to call when the model data is received.
 function ModelData.QueueRefresh(Model, Object, Callback)
 	if not IsValid(Object) then return end
 	if not isfunction(Callback) then return end
