@@ -35,6 +35,7 @@ do -- Spawning and Updating --------------------
 	local Crates    = Classes.Crates
 	local Entities  = Classes.Entities
 	local AmmoTypes = Classes.AmmoTypes
+	local CrateTypes = Classes.CrateTypes
 	local Weapons   = Classes.Weapons
 
 	local Inputs = {
@@ -294,7 +295,11 @@ do -- Spawning and Updating --------------------
 		local Class  = Classes.GetGroup(Source, Data.Weapon) -- The class representing a weapon type (example IDs: "AC", "HW", etc.)
 		local Weapon = Source.GetItem(Class.ID, Data.Weapon) -- This is (unintentionally?) always nil due to Class.ID == Data.Weapon after verification
 		local Ammo   = AmmoTypes.Get(Data.AmmoType) -- The class representing this ammo type
-		local Model  = "models/holograms/rcube_thin.mdl"
+		local CrateGroup = CrateTypes.Get(Data.CrateType)
+		local CrateItem = CrateTypes.GetItem(Data.CrateType, Data.CrateSubType)
+
+		local Model  = CrateItem.Model
+		local Material = CrateItem.Material
 
 		local CanSpawn = HookRun("ACF_PreEntitySpawn", "acf_ammo", Player, Data, Class, Weapon, Ammo)
 
@@ -311,7 +316,7 @@ do -- Spawning and Updating --------------------
 		Crate.ACF       = Crate.ACF or {}
 		Crate.ACF.Model = Model
 
-		Crate:SetMaterial("phoenix_storms/Future_vents")
+		Crate:SetMaterial(Material)
 		Crate:SetPlayer(Player)
 		Crate:SetScaledModel(Model)
 		Crate:SetAngles(Ang)
