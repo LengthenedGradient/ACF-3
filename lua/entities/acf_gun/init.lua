@@ -6,10 +6,12 @@ include("shared.lua")
 -- Local Vars -----------------------------------
 
 local ACF         = ACF
+local Contraption = ACF.Contraption
 local Classes     = ACF.Classes
 local AmmoTypes   = Classes.AmmoTypes
 local Utilities   = ACF.Utilities
 local Clock       = Utilities.Clock
+local Sounds      = Utilities.Sounds
 local TimerCreate = timer.Create
 local HookRun     = hook.Run
 local EMPTY       = { Type = "Empty", PropMass = 0, ProjMass = 0, Tracer = 0 }
@@ -96,12 +98,12 @@ do -- Spawn and Update functions --------------------------------
 
 	local function GetSound(Caliber, Class, Weapon)
 		local Result = Weapon and Weapon.Sound or Class.Sound
-		local Sounds = Class.Sounds
+		local ClassSounds = Class.Sounds
 
-		if Sounds then
+		if ClassSounds then
 			local Lowest = math.huge
 
-			for Current, Sound in pairs(Sounds) do
+			for Current, Sound in pairs(ClassSounds) do
 				if Caliber <= Current and Current <= Lowest then
 					Lowest = Current
 					Result = Sound
@@ -152,6 +154,8 @@ do -- Spawn and Update functions --------------------------------
 		Entity.Spread       = Class.Spread
 		Entity.DefaultSound = GetSound(Caliber, Class)
 		Entity.SoundPath    = Entity.SoundPath or Entity.DefaultSound
+		Entity.SoundPitch   = Entity.SoundPitch or 1
+		Entity.SoundVolume  = Entity.SoundVolume or 1
 		Entity.HitBoxes     = ACF.GetHitboxes(Model, Scale)
 		Entity.Long         = Class.LongBarrel
 		Entity.NormalMuzzle = Entity:WorldToLocal(Entity:GetAttachment(Entity:LookupAttachment("muzzle")).Pos)
@@ -163,6 +167,8 @@ do -- Spawn and Update functions --------------------------------
 		-- Set NWvars
 		Entity:SetNWString("WireName", "ACF " .. Entity.Name)
 		Entity:SetNWString("Sound", Entity.SoundPath)
+		Entity:SetNWFloat("SoundPitch", Entity.SoundPitch)
+		Entity:SetNWFloat("SoundVolume", Entity.SoundVolume)
 		Entity:SetNWString("Class", Entity.Class)
 
 		-- Adjustable barrel length
@@ -184,10 +190,7 @@ do -- Spawn and Update functions --------------------------------
 		if IsValid(PhysObj) then
 			local Mass = GetMass(Model, PhysObj, Class, Weapon)
 
-			Entity.ACF.Mass      = Mass
-			Entity.ACF.LegalMass = Mass
-
-			PhysObj:SetMass(Mass)
+			Contraption.SetMass(Entity, Mass)
 		end
 	end
 
@@ -227,14 +230,15 @@ do -- Spawn and Update functions --------------------------------
 		Player:AddCleanup(Class.Cleanup, Entity)
 		Player:AddCount(Limit, Entity)
 
-		-- The model isn't automatically updated, so this is required
-		Entity:SetModel(Weapon and Weapon.Model or Class.Model)
+		Entity.ACF			= {}
+
+		Contraption.SetModel(Entity, Weapon and Weapon.Model or Class.Model)
+
 		Entity:SetPlayer(Player)
 		Entity:SetAngles(Angle)
 		Entity:SetPos(Pos)
 		Entity:Spawn()
 
-		Entity.ACF          = {}
 		Entity.Owner        = Player -- MUST be stored on ent for PP
 		Entity.BarrelFilter = { Entity }
 		Entity.State        = "Empty"
@@ -242,6 +246,7 @@ do -- Spawn and Update functions --------------------------------
 		Entity.CurrentShot  = 0
 		Entity.TotalAmmo    = 0
 		Entity.BulletData   = EMPTY
+		Entity.TurretLink	= false
 		Entity.DataStore    = Entities.GetArguments("acf_gun")
 
 		Entity.CrewCheckDelay = 0
@@ -376,8 +381,8 @@ do -- Metamethods --------------------------------
 		if Crate:GetPos():DistToSqr(GunPos) > MaxDistance then
 			local Sound = UnlinkSound:format(math.random(1, 3))
 
-			Crate:EmitSound(Sound, 70, 100, ACF.Volume)
-			Gun:EmitSound(Sound, 70, 100, ACF.Volume)
+			Sounds.SendSound(Crate, Sound, 70, 100, 1)
+			Sounds.SendSound(Gun, Sound, 70, 100, 1)
 
 			CrateUnlinked = Gun:Unlink(Crate)
 		end
@@ -438,6 +443,20 @@ do -- Metamethods --------------------------------
 			return false, "This weapon is not linked to this crate."
 		end)
 
+		ACF.RegisterClassLink("acf_gun", "acf_turret", function(This, Turret)
+			This.TurretLink = true
+			This.Turret	= Turret
+
+			return true, "Weapon linked successfully."
+		end)
+
+		ACF.RegisterClassUnlink("acf_gun", "acf_turret", function(This, _)
+			This.TurretLink	= false
+			This.Turret	= nil
+
+			return true, "Weapon unlinked successfully."
+		end)
+
 		ACF.AddInputAction("acf_gun", "Fire", function(Entity, Value)
 			local Bool = tobool(Value)
 
@@ -495,7 +514,7 @@ do -- Metamethods --------------------------------
 			while TraceRes.HitNonWorld do
 				local Entity = TraceRes.Entity
 
-				if Entity.IsACFEntity and not Entity.IsACFArmor then break end
+				if Entity.IsACFEntity and not (Entity.IsACFArmor or Entity.IsACFTurret) then break end
 				if Entity:CPPIGetOwner() ~= owner then break end
 
 				filter[#filter + 1] = Entity
@@ -513,7 +532,7 @@ do -- Metamethods --------------------------------
 			if self.State ~= "Loaded" then -- Weapon is not loaded
 				if self.State == "Empty" and not self.Retry then
 					if not self:Load() then
-						self:EmitSound("weapons/pistol/pistol_empty.wav", 70, 100, ACF.Volume) -- Click!
+						Sounds.SendSound(self, "weapons/pistol/pistol_empty.wav", 70, 100, 1) -- Click!
 					end
 
 					self.Retry = true
@@ -530,6 +549,12 @@ do -- Metamethods --------------------------------
 				end
 
 				return false
+			end
+			if self.TurretLink and IsValid(self.Turret) then -- Special link to a turret, will block the gun from firing if the gun is not aligned with the turret's target angle
+				local Turret = self.Turret
+				if not Turret.Active then return false end
+
+				if self:GetForward():Dot(Turret.SlewFuncs.GetWorldTarget(Turret):Forward()) < 0.9961 then return false end
 			end
 			if HookRun("ACF_FireShell", self) == false then return false end -- Something hooked into ACF_FireShell said no
 
@@ -551,7 +576,7 @@ do -- Metamethods --------------------------------
 			local randUnitSquare = (self:GetUp() * (2 * math.random() - 1) + self:GetRight() * (2 * math.random() - 1))
 			local Spread = randUnitSquare:GetNormalized() * Cone * (math.random() ^ (1 / ACF.GunInaccuracyBias))
 			local Dir = (self:GetForward() + Spread):GetNormalized()
-			local Velocity = ACF_GetAncestor(self):GetVelocity()
+			local Velocity = Contraption.GetAncestor(self):GetVelocity()
 			local BulletData = self.BulletData
 			local AmmoType = AmmoTypes.Get(BulletData.Type)
 
@@ -652,7 +677,7 @@ do -- Metamethods --------------------------------
 
 			self:ReloadEffect(Reload and Time * 2 or Time)
 			self:SetState("Unloading")
-			self:EmitSound("weapons/357/357_reload4.wav", 70, 100, ACF.Volume)
+			Sounds.SendSound(self, "weapons/357/357_reload4.wav", 70, 100, 1)
 			self.CurrentShot = 0
 			self.BulletData  = EMPTY
 
@@ -748,7 +773,7 @@ do -- Metamethods --------------------------------
 			self:SetState("Loading")
 
 			if self.MagReload then -- Mag-fed/Automatically loaded
-				self:EmitSound("weapons/357/357_reload4.wav", 70, 100, ACF.Volume)
+				Sounds.SendSound(self, "weapons/357/357_reload4.wav", 70, 100, 1)
 
 				self.NextFire = Clock.CurTime + self.MagReload
 
@@ -779,6 +804,10 @@ do -- Metamethods --------------------------------
 				duplicator.StoreEntityModifier(self, "ACFCrates", Entities)
 			end
 
+			if IsValid(self.Turret) then
+				duplicator.StoreEntityModifier(self, "ACFTurret", {self.Turret:EntIndex()})
+			end
+
 			-- Wire dupe info
 			self.BaseClass.PreEntityCopy(self)
 		end
@@ -803,6 +832,10 @@ do -- Metamethods --------------------------------
 				end
 
 				EntMods.ACFCrates = nil
+			end
+
+			if EntMods.ACFTurret and next(EntMods.ACFTurret) then
+				self:Link(CreatedEntities[EntMods.ACFTurret[1]])
 			end
 
 			self.BaseClass.PostEntityPaste(self, Player, Ent, CreatedEntities)
@@ -833,6 +866,27 @@ do -- Metamethods --------------------------------
 			return Text:format(Status, Firerate, self.CurrentShot, CrateAmmo)
 		end
 	end -----------------------------------------
+
+	do	-- Other networking
+		util.AddNetworkString("ACF.RequestGunInfo")
+		net.Receive("ACF.RequestGunInfo",function(_,Ply)
+			local Gun = net.ReadEntity()
+			if not IsValid(Gun) then return end
+
+			local AmmoCrates = {}
+
+			if next(Gun.Crates) then
+				for Crate in pairs(Gun.Crates) do
+					AmmoCrates[#AmmoCrates + 1] = Crate:EntIndex()
+				end
+			end
+
+			net.Start("ACF.RequestGunInfo")
+				net.WriteEntity(Gun)
+				net.WriteString(util.TableToJSON(AmmoCrates))
+			net.Send(Ply)
+		end)
+	end
 
 	do -- Misc ----------------------------------
 		function ENT:ACF_Activate(Recalc)
