@@ -132,6 +132,11 @@ do -- Spawning and Updating --------------------
 				Ammo = AmmoTypes.Get(Data.AmmoType)
 			end
 
+			print(Data.AmmoUpdateMode)
+			if not isstring(Data.AmmoUpdateMode) then
+				Data.AmmoUpdateMode = "Update"
+			end
+
 			do -- External verifications
 				Ammo:VerifyData(Data, Class) -- Custom verification function defined by each ammo type class
 

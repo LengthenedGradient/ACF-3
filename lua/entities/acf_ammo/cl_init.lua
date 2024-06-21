@@ -47,6 +47,7 @@ net.Receive("ACF_RequestAmmoData", function()
 		Entity.Spacing = Data.Spacing
 		Entity.MagSize = Data.MagSize
 		Entity.HasBoxedAmmo = Data.MagSize > 0
+		Entity.Slots = Data.Slots
 	end
 
 	if Queued[Entity] then
@@ -144,6 +145,12 @@ do -- Ammo overlay
 		return DrawBoxes:GetBool()
 	end
 
+	function ENT:OnScroll(dir)
+		local curIndex = ACF.GetClientNumber("AmmoUpdateIndex", 1)
+		local newIndex = math.Clamp(curIndex + dir, 1, 6)
+		ACF.SetClientData("AmmoUpdateIndex",newIndex)
+	end
+
 	function ENT:DrawOverlay() -- Trace is passed as first argument, but not needed
 		if not self.HasData then
 			if self.HasData == nil and self.RequestAmmoData then
@@ -170,6 +177,42 @@ do -- Ammo overlay
 			local Offset = RoundAngle:Right() * (Fits.y * RoundSize.y) * 0.5 * (1 - AmmoPerc)
 
 			render.DrawWireframeBox(Center + Offset, RoundAngle, -BulkSize, BulkSize, Red)
+		end
+
+		local CratePos = Center:ToScreen()
+		local px, py = CratePos.x, CratePos.y
+
+		local lineW = 80
+		local lineH = 30
+
+		local curIndex = ACF.GetClientNumber("AmmoUpdateIndex", 1)
+		cam.Start2D()
+			-- Draw the ammo type lines
+			for i = 1, 6 do
+				local curY = py + lineH * (i-1)
+				if i == curIndex then -- This line is selected
+					surface.SetDrawColor(Color(0,255,0,255))
+					surface.DrawRect(px, curY, lineW,lineH)
+				else
+					surface.SetDrawColor(Color(200,200,200,100))
+					surface.DrawRect(px, curY, lineW,lineH)
+				end
+
+				local lineText
+				lineText = string.format("Ammo: [%s] [%s]", "", "")
+
+				draw.SimpleTextOutlined(lineText,"DermaDefault",px+2,curY+lineH/2,Color(255,255,255),TEXT_ALIGN_LEFT,TEXT_ALIGN_CENTER,1,Color(0,0,0))
+			end
+		cam.End2D()
+
+		-- Determine what action to take when shift clicking
+		local Player = LocalPlayer()
+		if Player:KeyDown(IN_RELOAD) then -- Remove slot (R key)
+			ACF.SetClientData("AmmoUpdateMode", "Remove")
+		elseif Player:KeyDown(IN_USE) then -- Add slot (E key)
+			ACF.SetClientData("AmmoUpdateMode", "Add")
+		else -- Update slot (no E or R key)
+			ACF.SetClientData("AmmoUpdateMode", "Update")
 		end
 	end
 end

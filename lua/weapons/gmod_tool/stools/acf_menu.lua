@@ -59,6 +59,31 @@ if CLIENT then
 		if IsValid(self.LastEntity) then self.LastEntity:CleanupOverlay() end
 	end
 
+	hook.Add("PlayerButtonDown", "", function(ply, button)
+		if not button then return end
+
+		local Trace = LocalPlayer():GetEyeTrace()
+		local Distance = Trace.StartPos:DistToSqr(Trace.HitPos)
+		local Entity = Trace.Entity
+		if not IsValid(Entity) then return end
+		if Distance <= 65536 and Entity.OnKeyPress then Entity:OnKeyPress(button) end
+	end)
+
+	hook.Add("PlayerBindPress", "", function(ply, bind, pressed)
+		if not pressed then return end
+
+		local Trace = LocalPlayer():GetEyeTrace()
+		local Distance = Trace.StartPos:DistToSqr(Trace.HitPos)
+		local Entity = Trace.Entity
+		if not IsValid(Entity) then return end
+		if Distance <= 65536 and Entity.OnScroll then
+			if bind == "invnext" then Entity:OnScroll(1)
+			elseif bind == "invprev" then Entity:OnScroll(-1)
+			else return end
+			return true
+		end
+	end)
+
 	TOOL.BuildCPanel = ACF.CreateSpawnMenu
 
 	concommand.Add("acf_reload_spawn_menu", function()
