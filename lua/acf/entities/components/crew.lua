@@ -34,8 +34,8 @@ Components.Register("CRW", {
 		local InstructionsBase = Menu:AddCollapsible("Usage Instructions:")
 		InstructionsBase:AddLabel("Generally, crew that are more upright will perform better. You can link one crew to multiple components and they will take jobs in that order.")
 		InstructionsBase:AddLabel("Gunners affect the accuracy of your gun and the slew rate of your turret. They prefer sitting.")
-		InstructionsBase:AddLabel("Drivers affect the fuel efficiency of your engines. They prefer sitting.")
-		InstructionsBase:AddLabel("Loaders affect the reload rate of your guns. They prefer standing. To a limit, the more space you have the faster they reload. They will be disorientated if put in a turret.")
+		InstructionsBase:AddLabel("Drivers affect the fuel efficiency of your engines. They prefer sitting. They will be disorientated if put in a turret.")
+		InstructionsBase:AddLabel("Loaders affect the reload rate of your guns. They prefer standing. To a limit, the more space you have the faster they reload.")
 
 		ACF.SetClientData("PrimaryClass", "acf_crew")
 	end,
