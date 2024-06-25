@@ -20,16 +20,19 @@ do
 	local Entities   = Classes.Entities
 	local CheckLegal = ACF.CheckLegal
 
+	util.AddNetworkString("ACF_Crew_Jobs_Update")
+
 	local function VerifyData(Data)
+		-- Set crew ID from component (?)
 		if not Data.CrewID then
 			Data.CrewID = Data.Component or Data.Id
 		end
 
 		local Class = Classes.GetGroup(Components, Data.CrewID)
 
+		-- Default crew type should be sitting if not specified
 		if not Class or Class.Entity ~= "acf_crew" then
-			Data.CrewID = "CRW-SIT" -- Default sitting position
-
+			Data.CrewID = "CRW-SIT"
 			Class = Classes.GetGroup(Components, Data.CrewID)
 		end
 
@@ -76,19 +79,13 @@ do
 		if Entity.OnUpdate then
 			Entity:OnUpdate(Data, Class, Crew)
 		end
-
-		if Entity.OnDamaged then
-			Entity:OnDamaged()
-		end
 	end
-
-
 
 	function Makeacf_Crew(Player, Pos, Angle, Data)
 		VerifyData(Data)
 
 		local Class = Classes.GetGroup(Components, Data.CrewID)
-		local Crew = Class.Lookup[Data.CrewID]
+		local Crew = Components.GetItem(Class.ID, Data.CrewID)
 		local Limit = Class.LimitConVar.Name
 
 		if not Player:CheckLimit(Limit) then return false end
@@ -107,8 +104,9 @@ do
 
 		Entity.Owner = Player
 		Entity.DataStore = Entities.GetArguments("acf_crew")
-		Entity.CrewData = Crew -- Store a reference to Class.Lookup[Data.Crew]
-		Entity.Links = {}
+		Entity.CrewData = Crew
+		Entity.Links = {} -- Job entities
+		Entity.CrewLinks = {} -- Other crew linked to this
 		Entity.CrewType = ""
 
 		UpdateCrew(Entity, Data, Class, Crew)
@@ -164,11 +162,28 @@ do
 	end
 
 	function ENT:UpdateOverlayText()
-		return "Crew Type: " .. self.CrewType
+		str = ""
+		for k,v in pairs(self.CrewLinks) do
+			str = str .. tostring(v) .. " "
+		end
+		return str
 	end
 end
 
 -- Entity methods
+
+local function CheckCommonAncestor(e1,e2)
+	local p1 = e1
+	local p2 = e2
+	while p1:GetParent():IsValid() do
+		p1 = p1:GetParent()
+	end
+	while p2:GetParent():IsValid() do
+		p2 = p2:GetParent()
+	end
+	return p1 == p2
+end
+
 do
 	local MaxDistance = ACF.LinkDistance ^ 2
 	print("MaxDistance",MaxDistance)
@@ -200,7 +215,7 @@ end
 -- Linkage Related
 do
 	function LinkCrew(Target, CrewEnt)
-		if not Target.Crew then Target.Crew = {} end
+		if not Target.Crew then Target.Crew = {} end -- Safely make sure the link target has a crew list
 		if Target.Crew[CrewEnt] then return false, "This entity is already linked to this crewmate!" end
 		if CrewEnt.Links[Target] then return false, "This entity is already linked to this crewmate!" end
 
@@ -260,6 +275,35 @@ do
 
 	ACF.RegisterClassUnlink("prop_vehicle_prisoner_pod", "acf_crew", function(Pod, Crew)
 		return UnlinkCrew(Pod, Crew)
+	end)
+
+	ACF.RegisterClassLink("acf_crew","acf_crew", function(From,To) 
+		print(string.format("Link: [%s] -> [%s]",From,To))
+
+		-- Safely add the new crew
+		if not table.HasValue( To.CrewLinks, From) then
+			table.insert(To.CrewLinks, From)
+			net.Start("ACF_Crew_Jobs_Update")
+			net.WriteTable(To.CrewLinks,true)
+			net.Broadcast()
+		end
+
+		To:UpdateOverlay()
+		From:UpdateOverlay()
+		return true
+	end)
+
+	ACF.RegisterClassUnlink("acf_crew","acf_crew", function(From,To) 
+		print(string.format("UnLink: [%s] -> [%s]",From,To))
+		if table.HasValue( To.CrewLinks, From) then
+			table.RemoveByValue(To.CrewLinks, From)
+			net.Start("ACF_Crew_Jobs_Update")
+			net.WriteTable(To.CrewLinks,true)
+			net.Broadcast()
+		end
+		To:UpdateOverlay()
+		From:UpdateOverlay()
+		return true
 	end)
 end
 
