@@ -174,22 +174,35 @@ do
 end
 
 -- Entity methods
-
-local function GetAncestor(e)
-	local p = e
-	while p:GetParent():IsValid() do
-		p = p:GetParent()
-	end
-	return p
-end
-
-local function GetUpwards(forwards)
-	return forwards:Cross(Vector(0,0,1)):Cross(forwards):GetNormalized()
-end
-
 do
+	-- Think logic (mostly checks and stuff that updates frequently)
+	local function traceVisHullCube(pos1, pos2, boxsize, filter)
+		local res = TraceHull({
+			start = pos1,
+			endpos = pos2,
+			filter = filter,
+			mins = -boxsize / 2,
+			maxs = boxsize / 2
+		})
+
+		local length = pos1:Distance(pos2)
+		local truelength = res.Fraction * length
+		return res.Fraction, length, truelength
+	end
+
+	local function GetAncestor(e)
+		local p = e
+		while p:GetParent():IsValid() do
+			p = p:GetParent()
+		end
+		return p
+	end
+
+	local function GetUpwards(forwards)
+		return forwards:Cross(Vector(0,0,1)):Cross(forwards):GetNormalized()
+	end
+
 	local MaxDistance = ACF.LinkDistance ^ 2
-	print("MaxDistance",MaxDistance)
 	local UnlinkSound = "physics/metal/metal_box_impact_bullet%s.wav"
 
 	function ENT:Think()
@@ -208,6 +221,8 @@ do
 					self:Unlink(Link)
 					Link:Unlink(self)
 				end
+
+				if not IsValid(Link) then self:Unlink(Link) end
 			end
 		end
 
@@ -287,7 +302,7 @@ do
 	end
 
 	--- Register basic linkages from crew to guns, engines
-	for k,v in ipairs({"acf_gun","acf_engine","prop_vehicle_prisoner_pod"}) do
+	for k,v in ipairs({"acf_gun","acf_engine","prop_vehicle_prisoner_pod", "acf_turret"}) do
 		ACF.RegisterClassLink(v, "acf_crew", function(Target, Crew) return LinkCrew(Target, Crew) end)
 		ACF.RegisterClassUnlink(v, "acf_crew", function(Target, Crew) return UnlinkCrew(Target, Crew) end)
 	end
