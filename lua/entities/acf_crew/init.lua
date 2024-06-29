@@ -13,28 +13,36 @@ local Utilities   = ACF.Utilities
 local Clock       = Utilities.Clock
 --===============================================================================================--
 -- Entity initialization, update and verification
+
+local hook	   = hook
+local Classes	= ACF.Classes
+local Components = Classes.Components
+local CrewTypes = Classes.CrewTypes
+local Entities   = Classes.Entities
+local CheckLegal = ACF.CheckLegal
+
 do
-	local hook	   = hook
-	local Classes	= ACF.Classes
-	local Components = Classes.Components
-	local Entities   = Classes.Entities
-	local CheckLegal = ACF.CheckLegal
+
 
 	util.AddNetworkString("ACF_Crew_Reps")
 	util.AddNetworkString("ACF_Crew_Links")
 
 	local function VerifyData(Data)
 		-- Set crew ID from component (?)
-		if not Data.CrewID then
-			Data.CrewID = Data.Component or Data.Id
+		if not Data.CrewModel then
+			Data.CrewModel = Data.Component or Data.Id
 		end
 
-		local Class = Classes.GetGroup(Components, Data.CrewID)
+		local Class = Classes.GetGroup(Components, Data.CrewModel)
 
 		-- Default crew type should be sitting if not specified
 		if not Class or Class.Entity ~= "acf_crew" then
-			Data.CrewID = "CRW-SIT"
-			Class = Classes.GetGroup(Components, Data.CrewID)
+			Data.CrewModel = "Sitting"
+			Class = Classes.GetGroup(Components, Data.CrewModel)
+		end
+
+		if not Data.CrewTypeID then
+			Data.CrewTypeID = "Driver"
 		end
 
 		do -- External verifications
@@ -62,10 +70,12 @@ do
 		end
 
 		Entity.Name = Crew.Name
-		Entity.ShortName = Entity.CrewID
+		Entity.ShortName = Entity.CrewModel
 		Entity.EntType = Class.Name
 		Entity.ClassData = Class
 		Entity.OnUpdate = Crew.OnUpdate or Class.OnUpdate
+
+		Entity.CrewType = CrewTypes.Get(Data.CrewTypeID)
 
 		Entity:SetNWString("WireName", "ACF " .. Crew.Name)
 
@@ -80,13 +90,16 @@ do
 		if Entity.OnUpdate then
 			Entity:OnUpdate(Data, Class, Crew)
 		end
+
+		Entity:UpdateOverlay(true)
 	end
 
-	function Makeacf_Crew(Player, Pos, Angle, Data)
+	function MakeCrew(Player, Pos, Angle, Data)
 		VerifyData(Data)
 
-		local Class = Classes.GetGroup(Components, Data.CrewID)
-		local Crew = Components.GetItem(Class.ID, Data.CrewID)
+		local Class = Classes.GetGroup(Components, "CrewModels")
+		local Crew = Components.GetItem(Class.ID, Data.CrewModel)
+		local CrewType = CrewTypes.Get(Data.CrewTypeID)
 		local Limit = Class.LimitConVar.Name
 
 		if not Player:CheckLimit(Limit) then return false end
@@ -105,13 +118,12 @@ do
 
 		Entity.Owner = Player
 		Entity.DataStore = Entities.GetArguments("acf_crew")
-		Entity.CrewData = Crew
 		Entity.TargetLinks = {} -- Targets linked to this crew (dictionary)
 		Entity.ReplaceLinksOrdered = {} -- Crew to replace this crew (array)
 		Entity.ReplaceLinks = {} -- Crew to replace this crew (dictionary)
 		Entity.AllLinks = {} -- All links (targets and crew) linked to this crew
 
-		Entity.CrewType = ""
+		Entity.CrewType = CrewType
 		Entity.LeanAngle = 0
 
 		UpdateCrew(Entity, Data, Class, Crew)
@@ -131,15 +143,15 @@ do
 		return Entity
 	end
 
-	Entities.Register("acf_crew", Makeacf_Crew, "Crew")
+	Entities.Register("acf_crew", MakeCrew, "Crew")
 
 	ACF.RegisterLinkSource("acf_gun", "Crew")
 
 	function ENT:Update(Data)
 		VerifyData(Data)
 
-		local Class = Classes.GetGroup(Components, Data.CrewID)
-		local Crew = Class.Lookup[Data.CrewID]
+		local Class = Classes.GetGroup(Components, Data.CrewModel)
+		local Crew = Class.Lookup[Data.CrewModel]
 		local OldClass = self.ClassData
 
 		local CanUpdate, Reason = HookRun("ACF_PreEntityUpdate", "acf_crew", self, Data, Class, Crew)
@@ -167,7 +179,7 @@ do
 	end
 
 	function ENT:UpdateOverlayText()
-		str = string.format("Health: %s%%\nRole: %s\nLean Angle: %s",100,self.CrewType,self.LeanAngle)
+		str = string.format("Health: %s%%\nRole: %s\nLean Angle: %s",100,self.CrewType.ID,self.LeanAngle)
 
 		return str
 	end
@@ -198,8 +210,9 @@ do
 		return p
 	end
 
+	local VertVec = Vector(0,0,1)
 	local function GetUpwards(forwards)
-		return forwards:Cross(Vector(0,0,1)):Cross(forwards):GetNormalized()
+		return forwards:Cross(VertVec):Cross(forwards):GetNormalized()
 	end
 
 	local MaxDistance = ACF.LinkDistance ^ 2
@@ -222,6 +235,7 @@ do
 					Link:Unlink(self)
 				end
 
+				-- Unlink from stuff that died
 				if not IsValid(Link) then self:Unlink(Link) end
 			end
 		end
@@ -250,6 +264,7 @@ end
 do
 	--- Starts a net message and sends an array of entities using counts
 	local function BroadcastEntities(name,entity,tbl,bits)
+		print(name,entity,bits)
 		net.Start(name)
 		net.WriteEntity(entity)
 		net.WriteInt(#tbl, bits)
@@ -268,14 +283,6 @@ do
 		CrewEnt.TargetLinks[Target] = true
 		CrewEnt.AllLinks[Target] = true
 
-		local LUT = {
-			acf_engine = "Driver",
-			acf_gun = "Loader",
-			acf_turret = "Gunner",
-		}
-
-		CrewEnt.CrewType = LUT[Target:GetClass()] or ""
-
 		BroadcastEntities("ACF_Crew_Links", CrewEnt, table.GetKeys(CrewEnt.TargetLinks), 8)
 		if Target.CheckCrew then Target:CheckCrew() end
 		if Target.UpdateOverlay then Target:UpdateOverlay() end
@@ -290,7 +297,6 @@ do
 			CrewEnt.TargetLinks[Target] = nil
 			CrewEnt.AllLinks[Target] = nil
 
-			CrewEnt.CrewType = ""
 			BroadcastEntities("ACF_Crew_Links", CrewEnt, table.GetKeys(CrewEnt.TargetLinks), 8)
 			if Target.CheckCrew then Target:CheckCrew() end
 			if Target.UpdateOverlay then Target:UpdateOverlay() end
@@ -348,13 +354,22 @@ do
 	function ENT:PreEntityCopy()
 		if next(self.TargetLinks) then
 			local Entities = {}
-
-			for LinkTarget in pairs(self.TargetLinks) do
-				Entities[#Entities + 1] = LinkTarget:EntIndex()
+			for Ent in pairs(self.TargetLinks) do
+				Entities[#Entities + 1] = Ent:EntIndex()
 			end
-
-			duplicator.StoreEntityModifier(self, "ACFCrews", Entities)
+			duplicator.StoreEntityModifier(self, "CrewTargetLinks", Entities)
 		end
+
+		if next(self.ReplaceLinksOrdered) then
+			local Entities = {}
+			for _, Ent in ipairs(self.ReplaceLinksOrdered) do
+				Entities[#Entities + 1] = Ent:EntIndex()
+			end
+			duplicator.StoreEntityModifier(self, "CrewReplacementLinks", Entities)
+		end
+
+		print("PreCopy CrewTypeID: ", self.CrewType.ID)
+		duplicator.StoreEntityModifier(self, "CrewTypeID", {self.CrewType.ID})
 
 		-- Wire dupe info
 		self.BaseClass.PreEntityCopy(self)
@@ -363,12 +378,24 @@ do
 	function ENT:PostEntityPaste(Player, Ent, CreatedEntities)
 		local EntMods = Ent.EntityMods
 
-		if EntMods.ACFCrews then
-			for _, EntID in pairs(EntMods.ACFCrews) do
+		-- Note: Since this happens *after* the entity is made, it relies on the entity to 
+		print("PostCopy CrewTypeID: ",EntMods.CrewTypeID[1])
+		if EntMods.CrewTypeID then
+			self.CrewType = CrewTypes.Get(EntMods.CrewTypeID[1])
+		end
+
+		if EntMods.CrewTargetLinks then
+			for _, EntID in pairs(EntMods.CrewTargetLinks) do
 				self:Link(CreatedEntities[EntID])
 			end
 
-			EntMods.ACFCrews = nil
+			EntMods.CrewTargetLinks = nil
+		end
+
+		if EntMods.CrewReplacementLinks then
+			for _, EntID in ipairs(EntMods.CrewReplacementLinks) do
+				CreatedEntities[EntID]:Link(self)
+			end
 		end
 
 		--Wire dupe info
@@ -386,7 +413,7 @@ do
 
 		HookRemove("AdvDupe_FinishPasting","crewdupefinished" .. self:EntIndex())
 
-		for ent in pairs(self.TargetLinks) do
+		for ent in pairs(self.AllLinks) do
 			self:Unlink(ent)
 		end
 	end

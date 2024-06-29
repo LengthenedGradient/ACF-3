@@ -11,6 +11,7 @@ net.Receive("ACF_Crew_Reps",function()
     local Entity = net.ReadEntity()
     local Count = net.ReadInt(8)
     Entity.ReplaceLinks = {}
+    if Count == 0 or not Entity:IsValid() then return end
     for i = 1, Count do
         Entity.ReplaceLinks[i] = net.ReadEntity()
     end
@@ -21,6 +22,7 @@ net.Receive("ACF_Crew_Links",function()
     local Entity = net.ReadEntity()
     local Count = net.ReadInt(8)
     Entity.TargetLinks = {}
+    if Count == 0 or not Entity:IsValid() then return end
     for i = 1, Count do
         Entity.TargetLinks[i] = net.ReadEntity()
     end
