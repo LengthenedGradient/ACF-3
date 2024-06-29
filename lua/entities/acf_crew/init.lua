@@ -13,7 +13,7 @@ local Utilities   = ACF.Utilities
 local Clock       = Utilities.Clock
 --===============================================================================================--
 -- Entity initialization, update and verification
-
+local Contraption = ACF.Contraption
 local hook	   = hook
 local Classes	= ACF.Classes
 local Components = Classes.Components
@@ -77,15 +77,20 @@ do
 
 		Entity.CrewType = CrewTypes.Get(Data.CrewTypeID)
 
-		Entity:SetNWString("WireName", "ACF " .. Crew.Name)
+		Entity:SetNWString("WireName", "ACF " .. Crew.Name) -- Set overlay wire entity name
 
 		ACF.Activate(Entity, true)
 
-		Entity.ACF.LegalMass = Class.Mass
+		Entity.ACF.LegalMass = Class.Mass -- TODO: Still necessary?
 		Entity.ACF.Model = Crew.Model
 
 		local Phys = Entity:GetPhysicsObject()
 		if IsValid(Phys) then Phys:SetMass(Class.Mass) end
+
+		-- local PhysObj = Entity.ACF.PhysObj
+		-- if IsValid(PhysObj) then
+		-- 	Contraption.SetMass(Entity, Class.Mass)
+		-- end
 
 		if Entity.OnUpdate then
 			Entity:OnUpdate(Data, Class, Crew)
@@ -122,7 +127,6 @@ do
 		Entity.ReplaceLinksOrdered = {} -- Crew to replace this crew (array)
 		Entity.ReplaceLinks = {} -- Crew to replace this crew (dictionary)
 		Entity.AllLinks = {} -- All links (targets and crew) linked to this crew
-
 		Entity.CrewType = CrewType
 		Entity.LeanAngle = 0
 
@@ -143,8 +147,9 @@ do
 		return Entity
 	end
 
-	Entities.Register("acf_crew", MakeCrew, "Crew")
+	Entities.Register("acf_crew", MakeCrew)
 
+	-- TODO: Determine sources
 	ACF.RegisterLinkSource("acf_gun", "Crew")
 
 	function ENT:Update(Data)
