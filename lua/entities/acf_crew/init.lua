@@ -55,8 +55,6 @@ do
 	end
 
 	local function UpdateCrew(Entity, Data, Class, Crew)
-		VerifyData(Data)
-
 		Entity.ACF = Entity.ACF or {}
 		Entity.ACF.Model = Crew.Model
 
@@ -65,6 +63,7 @@ do
 		Entity:PhysicsInit(SOLID_VPHYSICS)
 		Entity:SetMoveType(MOVETYPE_VPHYSICS)
 
+		-- Loads Entity.CrewTypeID from Data
 		for _, V in ipairs(Entity.DataStore) do
 			Entity[V] = Data[V]
 		end
@@ -84,13 +83,10 @@ do
 		Entity.ACF.LegalMass = Class.Mass -- TODO: Still necessary?
 		Entity.ACF.Model = Crew.Model
 
-		local Phys = Entity:GetPhysicsObject()
-		if IsValid(Phys) then Phys:SetMass(Class.Mass) end
-
-		-- local PhysObj = Entity.ACF.PhysObj
-		-- if IsValid(PhysObj) then
-		-- 	Contraption.SetMass(Entity, Class.Mass)
-		-- end
+		local PhysObj = Entity.ACF.PhysObj
+		if IsValid(PhysObj) then
+			Contraption.SetMass(Entity, Class.Mass)
+		end
 
 		if Entity.OnUpdate then
 			Entity:OnUpdate(Data, Class, Crew)
@@ -123,12 +119,21 @@ do
 
 		Entity.Owner = Player
 		Entity.DataStore = Entities.GetArguments("acf_crew")
+
 		Entity.TargetLinks = {} -- Targets linked to this crew (dictionary)
 		Entity.ReplaceLinksOrdered = {} -- Crew to replace this crew (array)
 		Entity.ReplaceLinks = {} -- Crew to replace this crew (dictionary)
 		Entity.AllLinks = {} -- All links (targets and crew) linked to this crew
+
 		Entity.CrewType = CrewType
+		Entity.CrewTypeID = Data.CrewTypeID
+
 		Entity.LeanAngle = 0
+
+		Entity.ScanDirections = {} -- List of directions to scan
+		Entity.ScanLengths = {} -- List of lengths from each direction
+		Entity.ScanVolume = 0 -- Scanning volume
+		Entity.ScanFraction = 0 -- Fraction of scanning volume that's occupied
 
 		UpdateCrew(Entity, Data, Class, Crew)
 
@@ -147,10 +152,12 @@ do
 		return Entity
 	end
 
-	Entities.Register("acf_crew", MakeCrew)
+	Entities.Register("acf_crew", MakeCrew, "CrewTypeID")
 
 	-- TODO: Determine sources
 	ACF.RegisterLinkSource("acf_gun", "Crew")
+	ACF.RegisterLinkSource("acf_engine", "Crew")
+	ACF.RegisterLinkSource("acf_turret", "Crew")
 
 	function ENT:Update(Data)
 		VerifyData(Data)
@@ -207,14 +214,6 @@ do
 		return res.Fraction, length, truelength
 	end
 
-	local function GetAncestor(e)
-		local p = e
-		while p:GetParent():IsValid() do
-			p = p:GetParent()
-		end
-		return p
-	end
-
 	local VertVec = Vector(0,0,1)
 	local function GetUpwards(forwards)
 		return forwards:Cross(VertVec):Cross(forwards):GetNormalized()
@@ -231,7 +230,7 @@ do
 			for Link in pairs(AllLinks) do
 				-- Check distance limit and common ancestry
 				local OutOfRange = Pos:DistToSqr(Link:GetPos()) > MaxDistance
-				local DiffAncestors = (GetAncestor(self) ~= GetAncestor(Link))
+				-- local DiffAncestors = self:GetAncestor() ~= Link:GetAncestor()
 				if OutOfRange or DiffAncestors then
 					local Sound = UnlinkSound:format(math.random(1, 3))
 					Link:EmitSound(Sound, 70, 100, ACF.Volume)
@@ -246,7 +245,8 @@ do
 		end
 
 		-- Check lean angle (If crew have no ancestor this won't update)
-		local Ancestor = GetAncestor(self)
+		-- local Ancestor = GetAncestor(self)
+		local Ancestor = self
 		if Ancestor ~= self then
 			-- Determine deviation between baseplate upwards and crew upwards in degrees
 			local BaseUp = GetUpwards(Ancestor:GetForward())
@@ -258,6 +258,11 @@ do
 				self.LeanAngle = LeanAngle
 				self:UpdateOverlay()
 			end
+		end
+
+		-- Update space ergonomics if needed
+		if self.CrewType.ShouldScan then
+			print("r")
 		end
 
 		self:NextThink(Clock.CurTime + 1 + math.Rand(1,2))
@@ -283,6 +288,7 @@ do
 		if not Target.Crew then Target.Crew = {} end -- Safely make sure the link target has a crew list
 		if Target.Crew[CrewEnt] then return false, "This entity is already linked to this crewmate!" end
 		if CrewEnt.TargetLinks[Target] then return false, "This entity is already linked to this crewmate!" end
+		if not CrewEnt.CrewType.Whitelist[Target:GetClass()] then return false, "This entity cannot be linked with this occupation" end
 
 		Target.Crew[CrewEnt] = true
 		CrewEnt.TargetLinks[Target] = true
@@ -373,21 +379,12 @@ do
 			duplicator.StoreEntityModifier(self, "CrewReplacementLinks", Entities)
 		end
 
-		print("PreCopy CrewTypeID: ", self.CrewType.ID)
-		duplicator.StoreEntityModifier(self, "CrewTypeID", {self.CrewType.ID})
-
 		-- Wire dupe info
 		self.BaseClass.PreEntityCopy(self)
 	end
 
 	function ENT:PostEntityPaste(Player, Ent, CreatedEntities)
 		local EntMods = Ent.EntityMods
-
-		-- Note: Since this happens *after* the entity is made, it relies on the entity to 
-		print("PostCopy CrewTypeID: ",EntMods.CrewTypeID[1])
-		if EntMods.CrewTypeID then
-			self.CrewType = CrewTypes.Get(EntMods.CrewTypeID[1])
-		end
 
 		if EntMods.CrewTargetLinks then
 			for _, EntID in pairs(EntMods.CrewTargetLinks) do

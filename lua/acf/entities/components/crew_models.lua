@@ -10,12 +10,6 @@ Components.Register("CrewModels", {
 	Name   = "Crew Member",
 	Entity = "acf_crew",
 	Mass = 80,
-	MaxLeans = {
-		Gunner = 15.01,
-		Loader = 15.01,
-		Driver = 45.01,
-	},
-	-- MaxLeanEfficiency = 1,
 	LimitConVar = {
 		Name   = "_acf_crew",
 		Amount = 8,
@@ -49,6 +43,17 @@ Components.Register("CrewModels", {
 		ACF.LoadSortedList(CrewClass, Entries, "ID")
 
 	end,
+	GenerateScanDirections = function()
+		local directions = {}
+		for i = -1, 1 do
+			for j = -1, 1 do
+				for k = -1, 1 do
+					table.insert(directions,Vector(i,j,k))
+				end
+			end
+		end
+		return directions
+	end
 })
 
 do
