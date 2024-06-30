@@ -20,10 +20,52 @@ local Components = Classes.Components
 local CrewTypes = Classes.CrewTypes
 local Entities   = Classes.Entities
 local CheckLegal = ACF.CheckLegal
+local TraceHull = util.TraceHull
+
+local function traceVisHullCube(pos1, pos2, boxsize, filter)
+	local res = TraceHull({
+		start = pos1,
+		endpos = pos2,
+		filter = filter,
+		mins = -boxsize / 2,
+		maxs = boxsize / 2
+	})
+
+	local length = pos1:Distance(pos2)
+	local truelength = res.Fraction * length
+	return res.Fraction, length, truelength, res.HitPos
+end
+
+local function iterScan(ent, reps)
+	local localoffset = ent.CrewModel.OffsetL
+	local center = ent:LocalToWorld(localoffset)
+	local count = ent.ScanCount
+
+	-- Iterate reps times and iterate over time
+	for i = 1, reps do
+		local index = ent.ScanIndex
+		local disp = ent.ScanDisplacements[index]
+		local p1 = center
+		local p2 = ent:LocalToWorld(localoffset + disp*50)
+		local frac, _, _, hitpos= traceVisHullCube(p1, p2, Vector(6,6,6), ent)
+		debugoverlay.Line(p1,hitpos,1,Color(255,0,0))
+		ent.ScanLengths[index] = frac
+
+		index = index  + 1
+		if index > count then index = 1 end
+		ent.ScanIndex = index
+	end
+
+	-- Update based on old values
+	local sum = 0
+	for i = 1, count do
+		sum = sum + ent.ScanLengths[i]
+	end
+	print(sum)
+	return sum / count
+end
 
 do
-
-
 	util.AddNetworkString("ACF_Crew_Reps")
 	util.AddNetworkString("ACF_Crew_Links")
 
@@ -99,7 +141,7 @@ do
 		VerifyData(Data)
 
 		local Class = Classes.GetGroup(Components, "CrewModels")
-		local Crew = Components.GetItem(Class.ID, Data.CrewModel)
+		local CrewModel = Components.GetItem(Class.ID, Data.CrewModel)
 		local CrewType = CrewTypes.Get(Data.CrewTypeID)
 		local Limit = Class.LimitConVar.Name
 
@@ -125,23 +167,25 @@ do
 		Entity.ReplaceLinks = {} -- Crew to replace this crew (dictionary)
 		Entity.AllLinks = {} -- All links (targets and crew) linked to this crew
 
+		Entity.ClassData = Class
+		Entity.CrewModel = CrewModel
 		Entity.CrewType = CrewType
 		Entity.CrewTypeID = Data.CrewTypeID
 
 		Entity.LeanAngle = 0
 
-		Entity.ScanDirections = {} -- List of directions to scan
-		Entity.ScanLengths = {} -- List of lengths from each direction
-		Entity.ScanVolume = 0 -- Scanning volume
-		Entity.ScanFraction = 0 -- Fraction of scanning volume that's occupied
+		-- Initialize scanning related and update lengths for all directions in one pass
+		Entity.ScanDisplacements, Entity.ScanLengths, Entity.ScanCount = Class.GenerateScanSetup()
+		Entity.ScanIndex = 1 -- Index of current distance to update
+		Entity.ScanFraction = iterScan(Entity,Entity.ScanCount)
 
-		UpdateCrew(Entity, Data, Class, Crew)
+		UpdateCrew(Entity, Data, Class, CrewModel)
 
 		if Class.OnSpawn then
-			Class.OnSpawn(Entity, Data, Class, Crew)
+			Class.OnSpawn(Entity, Data, Class, CrewModel)
 		end
 
-		hook.Run("ACF_OnEntitySpawn", "acf_crew", Entity, Data, Class, Crew)
+		hook.Run("ACF_OnEntitySpawn", "acf_crew", Entity, Data, Class, CrewModel)
 
 		WireLib.TriggerOutput(Entity, "Entity", Entity)
 
@@ -192,7 +236,9 @@ do
 
 	function ENT:UpdateOverlayText()
 		str = string.format("Health: %s%%\nRole: %s\nLean Angle: %s",100,self.CrewType.ID,self.LeanAngle)
-
+		if self.CrewType.ShouldScan then
+			str = str .. "\nErgonomics: " .. math.Round(self.ScanFraction,2)
+		end
 		return str
 	end
 end
@@ -200,20 +246,6 @@ end
 -- Entity methods
 do
 	-- Think logic (mostly checks and stuff that updates frequently)
-	local function traceVisHullCube(pos1, pos2, boxsize, filter)
-		local res = TraceHull({
-			start = pos1,
-			endpos = pos2,
-			filter = filter,
-			mins = -boxsize / 2,
-			maxs = boxsize / 2
-		})
-
-		local length = pos1:Distance(pos2)
-		local truelength = res.Fraction * length
-		return res.Fraction, length, truelength
-	end
-
 	local VertVec = Vector(0,0,1)
 	local function GetUpwards(forwards)
 		return forwards:Cross(VertVec):Cross(forwards):GetNormalized()
@@ -256,15 +288,15 @@ do
 			-- Update overlay if lean angle changes
 			if self.LeanAngle ~= LeanAngle then
 				self.LeanAngle = LeanAngle
-				self:UpdateOverlay()
 			end
 		end
 
 		-- Update space ergonomics if needed
 		if self.CrewType.ShouldScan then
-			print("r")
+			self.ScanFraction = iterScan(self,self.CrewType.ScanStep or 0)
 		end
 
+		self:UpdateOverlay()
 		self:NextThink(Clock.CurTime + 1 + math.Rand(1,2))
 		return true
 	end

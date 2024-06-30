@@ -43,16 +43,18 @@ Components.Register("CrewModels", {
 		ACF.LoadSortedList(CrewClass, Entries, "ID")
 
 	end,
-	GenerateScanDirections = function()
+	GenerateScanSetup = function()
 		local directions = {}
+		local lengths = {}
 		for i = -1, 1 do
 			for j = -1, 1 do
 				for k = -1, 1 do
-					table.insert(directions,Vector(i,j,k))
+					table.insert(directions, Vector(i,j,k))
+					table.insert(lengths,0)
 				end
 			end
 		end
-		return directions
+		return directions, lengths, #directions
 	end
 })
 
@@ -61,6 +63,7 @@ do
 		Name = "Standing Crew Member",
 		Description = "This posture best suits a loader.",
 		Model = "models/chairs_playerstart/standingpose.mdl",
+		OffsetL = Vector(-0.264, -0.082, 36.126),
 		BaseErgoScores = {
 			Gunner = 0.75,
 			Loader = 1,
@@ -77,6 +80,7 @@ do
 		Name = "Sitting Crew Member",
 		Description = "This posture best suits a driver/gunner.",
 		Model = "models/chairs_playerstart/sitpose.mdl",
+		OffsetL = Vector(-0.016, -8.369, 25.897),
 		BaseErgoScores = {
 			Gunner = 1,
 			Loader = 0.75,

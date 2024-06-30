@@ -9,7 +9,7 @@ CrewTypes.Register("Gunner", {
 		acf_gun = true,
 		acf_turret = true,
 	},
-	ShouldScan = true,
+	ShouldScan = false,
 })
 CrewTypes.Register("Loader", {
 	Name        = "Loader",
@@ -17,8 +17,10 @@ CrewTypes.Register("Loader", {
 	Whitelist = {
 		acf_gun = true,
 	},
-	ShouldScan = false,
+	ShouldScan = true,
+	ScanStep = 9,
 })
+
 CrewTypes.Register("Driver", {
 	Name        = "Driver",
 	Description = "Drivers affect the fuel efficiency of your engines. They prefer sitting. They will be disorientated if put in a turret.",
