@@ -21,6 +21,7 @@ local CrewTypes = Classes.CrewTypes
 local Entities   = Classes.Entities
 local CheckLegal = ACF.CheckLegal
 local TraceHull = util.TraceHull
+local TimerSimple	= timer.Simple
 
 local function traceVisHullCube(pos1, pos2, boxsize, filter)
 	local res = TraceHull({
@@ -120,10 +121,10 @@ do
 
 		Entity:SetNWString("WireName", "ACF " .. Crew.Name) -- Set overlay wire entity name
 
-		ACF.Activate(Entity, true)
-
 		Entity.ACF.LegalMass = Class.Mass -- TODO: Still necessary?
 		Entity.ACF.Model = Crew.Model
+
+		ACF.Activate(Entity, true)
 
 		local PhysObj = Entity.ACF.PhysObj
 		if IsValid(PhysObj) then
@@ -143,9 +144,12 @@ do
 		local Class = Classes.GetGroup(Components, "CrewModels")
 		local CrewModel = Components.GetItem(Class.ID, Data.CrewModel)
 		local CrewType = CrewTypes.Get(Data.CrewTypeID)
-		local Limit = Class.LimitConVar.Name
 
+		local Limit = Class.LimitConVar.Name
 		if not Player:CheckLimit(Limit) then return false end
+
+		local CanSpawn	= HookRun("ACF_PreEntitySpawn", "acf_crew", Player, Data, Class)
+		if CanSpawn == false then return false end
 
 		local Entity = ents.Create("acf_crew")
 
@@ -235,7 +239,8 @@ do
 	end
 
 	function ENT:UpdateOverlayText()
-		str = string.format("Health: %s%%\nRole: %s\nLean Angle: %s",100,self.CrewType.ID,self.LeanAngle)
+		local Health = math.Round(self.ACF.Health / self.ACF.MaxHealth * 100)
+		str = string.format("Health: %s HP\nRole: %s\nLean Angle: %s", Health, self.CrewType.ID, self.LeanAngle)
 		if self.CrewType.ShouldScan then
 			str = str .. "\nErgonomics: " .. math.Round(self.ScanFraction,2)
 		end
@@ -246,11 +251,6 @@ end
 -- Entity methods
 do
 	-- Think logic (mostly checks and stuff that updates frequently)
-	local VertVec = Vector(0,0,1)
-	local function GetUpwards(forwards)
-		return forwards:Cross(VertVec):Cross(forwards):GetNormalized()
-	end
-
 	local MaxDistance = ACF.LinkDistance ^ 2
 	local UnlinkSound = "physics/metal/metal_box_impact_bullet%s.wav"
 
@@ -260,8 +260,12 @@ do
 		if next(AllLinks) then
 			local Pos = self:GetPos()
 			for Link in pairs(AllLinks) do
+				-- If the link is invalid, remove it and skip it
+				if not IsValid(Link) then self:Unlink(Link) continue end
+
 				-- Check distance limit and common ancestry
 				local OutOfRange = Pos:DistToSqr(Link:GetPos()) > MaxDistance
+				-- #TODO: FIX
 				-- local DiffAncestors = self:GetAncestor() ~= Link:GetAncestor()
 				if OutOfRange or DiffAncestors then
 					local Sound = UnlinkSound:format(math.random(1, 3))
@@ -270,35 +274,90 @@ do
 					self:Unlink(Link)
 					Link:Unlink(self)
 				end
-
-				-- Unlink from stuff that died
-				if not IsValid(Link) then self:Unlink(Link) end
 			end
 		end
 
-		-- Check lean angle (If crew have no ancestor this won't update)
-		-- local Ancestor = GetAncestor(self)
-		local Ancestor = self
-		if Ancestor ~= self then
-			-- Determine deviation between baseplate upwards and crew upwards in degrees
-			local BaseUp = GetUpwards(Ancestor:GetForward())
-			local CrewUp = self:GetUp()
-			local LeanAngle = math.Round(math.deg(math.acos(BaseUp:Dot(CrewUp) / (BaseUp:Length() * CrewUp:Length()))),2)
-
-			-- Update overlay if lean angle changes
-			if self.LeanAngle ~= LeanAngle then
-				self.LeanAngle = LeanAngle
-			end
-		end
+		-- Check world lean angle and update ergonomics
+		local LeanDot = Vector(0,0,1):Dot(self:GetUp())
+		self.LeanAngle = math.Round(math.deg(math.acos(LeanDot)),2)
 
 		-- Update space ergonomics if needed
 		if self.CrewType.ShouldScan then
-			self.ScanFraction = iterScan(self,self.CrewType.ScanStep or 0)
+			self.ScanFraction = iterScan(self,self.CrewType.ScanStep or 1)
 		end
 
 		self:UpdateOverlay()
 		self:NextThink(Clock.CurTime + 1 + math.Rand(1,2))
 		return true
+	end
+
+	function ENT:ACF_Activate(Recalc)
+		local PhysObj = self.ACF.PhysObj
+		local Mass    = PhysObj:GetMass()
+		local Area    = PhysObj:GetSurfaceArea() * ACF.InchToCmSq
+		local Armour  = 5 -- Human body isn't that thick but we have to put something here
+		local Health  = 100
+		local Percent = 1
+
+		if Recalc and self.ACF.Health and self.ACF.MaxHealth then
+			Percent = self.ACF.Health / self.ACF.MaxHealth
+		end
+
+		self.ACF.Area      = Area
+		self.ACF.Health    = Health * Percent
+		self.ACF.MaxHealth = Health
+		self.ACF.Armour    = Armour * Percent
+		self.ACF.MaxArmour = Armour
+		self.ACF.Type      = "Prop"
+	end
+
+	function ENT:ACF_OnDamage(DmgResult, DmgInfo)
+		local Health = self.ACF.Health
+		local HitRes = DmgResult:Compute()
+
+		HitRes.Kill = false
+
+		-- Prevent entity from being destroyed (clamp health)
+		local NewHealth = math.max(0, Health - HitRes.Damage)
+
+		self.ACF.Health = NewHealth
+		self.ACF.Armour = self.ACF.MaxArmour * (NewHealth / self.ACF.MaxHealth)
+
+		-- If we reach 0, replace the crew with the next one
+		if NewHealth == 0 and not self.ToBeReplaced then
+			-- self.ToBeReplaced will be initialized here if not already (since it wont be used elsewhere in the code, partial initialization is fine.)
+			self.ToBeReplaced = true
+
+			print("Dead; Switching Crew")
+			EmitSound( "death_bell.wav", self:GetPos())
+
+			TimerSimple(3, function()
+				self.ToBeReplaced = false
+
+				-- Search for the first valid and alive crew
+				for k,v in ipairs(self.ReplaceLinksOrdered) do
+					if IsValid(v) and v.ACF.Health and v.ACF.Health > 0 then
+						-- Swapping healths is effectively the same thing as swapping positions (assuming proficiency not lost)
+						self.ACF.Health, v.ACF.Health = v.ACF.Health, self.ACF.Health
+						self.ACF.Armour = self.ACF.MaxArmour * (self.ACF.Health / self.ACF.MaxHealth)
+						v.ACF.Armour = v.ACF.MaxArmour * (v.ACF.Health / v.ACF.MaxHealth)
+					end
+				end
+			end)
+		end
+
+		self:UpdateOverlay()
+
+		return HitRes
+	end
+
+	function ENT:ACF_OnRepaired(OldArmor, OldHealth, Armor, Health) -- Normally has OldArmor, OldHealth, Armor, and Health passed
+		-- Dead crew should not be revivable
+		if OldArmor == 0 then self.ACF.Armour = 0 end
+		if OldHealth == 0 then self.ACF.Health = 0 end
+
+		self.ACF.Armour = self.ACF.MaxArmour * (self.ACF.Health / self.ACF.MaxHealth)
+		self:UpdateOverlay()
 	end
 end
 
@@ -307,10 +366,12 @@ do
 	--- Starts a net message and sends an array of entities using counts
 	local function BroadcastEntities(name,entity,tbl,bits)
 		print(name,entity,bits)
+		PrintTable(tbl)
 		net.Start(name)
 		net.WriteEntity(entity)
 		net.WriteInt(#tbl, bits)
 		for _,v in ipairs(tbl) do
+			print("Send",v,IsValid(v))
 			net.WriteEntity(v)
 		end
 		net.Broadcast()
@@ -318,6 +379,8 @@ do
 
 	local function LinkCrew(Target, CrewEnt)
 		if not Target.Crew then Target.Crew = {} end -- Safely make sure the link target has a crew list
+
+		-- Early returns
 		if Target.Crew[CrewEnt] then return false, "This entity is already linked to this crewmate!" end
 		if CrewEnt.TargetLinks[Target] then return false, "This entity is already linked to this crewmate!" end
 		if not CrewEnt.CrewType.Whitelist[Target:GetClass()] then return false, "This entity cannot be linked with this occupation" end
@@ -326,6 +389,7 @@ do
 		CrewEnt.TargetLinks[Target] = true
 		CrewEnt.AllLinks[Target] = true
 
+		-- Update overlay and client side info
 		BroadcastEntities("ACF_Crew_Links", CrewEnt, table.GetKeys(CrewEnt.TargetLinks), 8)
 		if Target.CheckCrew then Target:CheckCrew() end
 		if Target.UpdateOverlay then Target:UpdateOverlay() end
@@ -335,11 +399,12 @@ do
 	end
 
 	local function UnlinkCrew(Target, CrewEnt)
-		if Target.Crew[CrewEnt] or CrewEnt.TargetLinks[Target] then
+		if Target.Crew[CrewEnt] and CrewEnt.TargetLinks[Target] then
 			Target.Crew[CrewEnt] = nil
 			CrewEnt.TargetLinks[Target] = nil
 			CrewEnt.AllLinks[Target] = nil
 
+			-- Update overlay and client side info
 			BroadcastEntities("ACF_Crew_Links", CrewEnt, table.GetKeys(CrewEnt.TargetLinks), 8)
 			if Target.CheckCrew then Target:CheckCrew() end
 			if Target.UpdateOverlay then Target:UpdateOverlay() end
@@ -351,7 +416,7 @@ do
 	end
 
 	--- Register basic linkages from crew to guns, engines
-	for k,v in ipairs({"acf_gun","acf_engine","prop_vehicle_prisoner_pod", "acf_turret"}) do
+	for k,v in ipairs({"acf_gun","acf_engine", "acf_turret"}) do
 		ACF.RegisterClassLink(v, "acf_crew", function(Target, Crew) return LinkCrew(Target, Crew) end)
 		ACF.RegisterClassUnlink(v, "acf_crew", function(Target, Crew) return UnlinkCrew(Target, Crew) end)
 	end
@@ -363,10 +428,10 @@ do
 		-- Safely add the new crew
 		if not table.HasValue(To.ReplaceLinksOrdered, From) then
 			table.insert(To.ReplaceLinksOrdered, From)
-			BroadcastEntities("ACF_Crew_Reps", To, To.ReplaceLinksOrdered, 8)
-
 			To.ReplaceLinks[From] = true
 			To.AllLinks[From] = true
+
+			BroadcastEntities("ACF_Crew_Reps", To, To.ReplaceLinksOrdered, 8)
 
 			To:UpdateOverlay()
 			From:UpdateOverlay()
@@ -377,12 +442,15 @@ do
 
 	ACF.RegisterClassUnlink("acf_crew","acf_crew", function(From,To)
 		print(string.format("UnLink: [%s] -> [%s]",From,To))
+
 		if table.HasValue(To.ReplaceLinksOrdered, From) then
 			table.RemoveByValue(To.ReplaceLinksOrdered, From)
-			BroadcastEntities("ACF_Crew_Reps", To, To.ReplaceLinksOrdered, 8)
-
 			To.ReplaceLinks[From] = nil
 			To.AllLinks[From] = nil
+
+			print("replacement")
+
+			BroadcastEntities("ACF_Crew_Reps", To, To.ReplaceLinksOrdered, 8)
 
 			To:UpdateOverlay()
 			From:UpdateOverlay()
@@ -395,20 +463,20 @@ end
 -- Adv Dupe 2 Related
 do
 	function ENT:PreEntityCopy()
-		if next(self.TargetLinks) then
-			local Entities = {}
-			for Ent in pairs(self.TargetLinks) do
-				Entities[#Entities + 1] = Ent:EntIndex()
-			end
-			duplicator.StoreEntityModifier(self, "CrewTargetLinks", Entities)
-		end
-
 		if next(self.ReplaceLinksOrdered) then
 			local Entities = {}
 			for _, Ent in ipairs(self.ReplaceLinksOrdered) do
 				Entities[#Entities + 1] = Ent:EntIndex()
 			end
 			duplicator.StoreEntityModifier(self, "CrewReplacementLinks", Entities)
+		end
+
+		if next(self.TargetLinks) then
+			local Entities = {}
+			for Ent in pairs(self.TargetLinks) do
+				Entities[#Entities + 1] = Ent:EntIndex()
+			end
+			duplicator.StoreEntityModifier(self, "CrewTargetLinks", Entities)
 		end
 
 		-- Wire dupe info
@@ -418,18 +486,18 @@ do
 	function ENT:PostEntityPaste(Player, Ent, CreatedEntities)
 		local EntMods = Ent.EntityMods
 
+		if EntMods.CrewReplacementLinks then
+			for _, EntID in ipairs(EntMods.CrewReplacementLinks) do
+				CreatedEntities[EntID]:Link(self)
+			end
+		end
+
 		if EntMods.CrewTargetLinks then
 			for _, EntID in pairs(EntMods.CrewTargetLinks) do
 				self:Link(CreatedEntities[EntID])
 			end
 
 			EntMods.CrewTargetLinks = nil
-		end
-
-		if EntMods.CrewReplacementLinks then
-			for _, EntID in ipairs(EntMods.CrewReplacementLinks) do
-				CreatedEntities[EntID]:Link(self)
-			end
 		end
 
 		--Wire dupe info
@@ -450,5 +518,7 @@ do
 		for ent in pairs(self.AllLinks) do
 			self:Unlink(ent)
 		end
+
+		-- WireLib.Remove(self)
 	end
 end

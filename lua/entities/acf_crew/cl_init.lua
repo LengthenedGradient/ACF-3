@@ -15,6 +15,8 @@ net.Receive("ACF_Crew_Reps",function()
     for i = 1, Count do
         Entity.ReplaceLinks[i] = net.ReadEntity()
     end
+    print("crewreps",Count)
+    PrintTable(Entity.ReplaceLinks)
 end)
 
 -- Deals with crew linking to non crew entities

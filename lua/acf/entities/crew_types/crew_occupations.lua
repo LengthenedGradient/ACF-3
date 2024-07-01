@@ -1,6 +1,15 @@
 local ACF         = ACF
 local CrewTypes = ACF.Classes.CrewTypes
 
+CrewTypes.Register("Loader", {
+	Name        = "Loader",
+	Description = "Loaders affect the reload rate of your guns. They prefer standing. To a limit, the more space you have the faster they reload.",
+	Whitelist = {
+		acf_gun = true,
+	},
+	ShouldScan = true,
+	ScanStep = 9,
+})
 
 CrewTypes.Register("Gunner", {
 	Name        = "Gunner",
@@ -10,15 +19,6 @@ CrewTypes.Register("Gunner", {
 		acf_turret = true,
 	},
 	ShouldScan = false,
-})
-CrewTypes.Register("Loader", {
-	Name        = "Loader",
-	Description = "Loaders affect the reload rate of your guns. They prefer standing. To a limit, the more space you have the faster they reload.",
-	Whitelist = {
-		acf_gun = true,
-	},
-	ShouldScan = true,
-	ScanStep = 9,
 })
 
 CrewTypes.Register("Driver", {
